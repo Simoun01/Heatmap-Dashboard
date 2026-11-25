@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 221 83% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 210 40% 94%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 128 100% 21%;
+    --border: 214 32% 89%;
+    --input: 214 32% 85%;
+    --ring: 221 83% 45%;
+    --radius: 0.6rem;
+
+    /* Chart tokens - categorical slots in fixed order (validated palette) */
+    --chart-surface: #ffffff;
+    --chart-grid: #e7e7e7;
+    --chart-axis: #c2c2c2;
+    --chart-ink: #666666;
+    --series-1: #257de0;
+    --series-2: #f47230;
+    --series-3: #00b894;
+    --series-4: #f2a600;
+    --series-5: #ee7fac;
+    --series-6: #008a17;
+    --series-7: #6a4ce2;
+    --series-8: #ec4647;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 0 0% 4%;
+      --foreground: 0 0% 94%;
+      --card: 0 0% 10%;
+      --card-foreground: 0 0% 94%;
+      --primary: 212 84% 57%;
+      --primary-foreground: 0 0% 100%;
+      --secondary: 0 0% 15%;
+      --secondary-foreground: 0 0% 94%;
+      --muted: 0 0% 15%;
+      --muted-foreground: 0 0% 64%;
+      --accent: 0 0% 17%;
+      --accent-foreground: 0 0% 94%;
+      --destructive: 0 72% 60%;
+      --destructive-foreground: 0 0% 100%;
+      --success: 122 49% 55%;
+      --border: 0 0% 20%;
+      --input: 0 0% 24%;
+      --ring: 212 84% 57%;
+
+      --chart-surface: #191919;
+      --chart-grid: #303030;
+      --chart-axis: #474747;
+      --chart-ink: #9c9c9c;
+      --series-1: #338ced;
+      --series-2: #e76624;
+      --series-3: #00a888;
+      --series-4: #d28e05;
+      --series-5: #e24d8b;
+      --series-6: #0aac23;
+      --series-7: #9887ef;
+      --series-8: #eb6263;
+    }
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

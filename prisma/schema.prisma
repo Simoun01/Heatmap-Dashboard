@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A first-party website that has the tracker.js snippet installed.
+model Site {
+  id        String    @id @default(cuid())
+  name      String
+  domain    String    @unique
+  createdAt DateTime  @default(now())
+  sessions  Session[]
+  events    Event[]
+}
+
+model Campaign {
+  id          String        @id @default(cuid())
+  name        String
+  utmCampaign String        @unique
+  utmSource   String
+  utmMedium   String
+  /// gbp | ads | email | social | general
+  channel     String
+  status      String        @default("active")
+  createdAt   DateTime      @default(now())
+  links       TrackedLink[]
+}
+
+/// A short link (/r/[slug]) that 302-redirects to a UTM-tagged destination.
+model TrackedLink {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  title          String?
+  baseUrl        String
+  destinationUrl String
+  /// gbp | ads | email | social | qr | general
+  channel        String    @default("general")
+  /// e.g. website_button, post, product, service (GBP)
+  placement      String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmTerm        String?
+  utmContent     String?
+  qrFg           String    @default("#0f172a")
+  qrBg           String    @default("#ffffff")
+  campaignId     String?
+  campaign       Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  clicks         Click[]
+
+  @@index([channel])
+}
+
+model Click {
+  id          String      @id @default(cuid())
+  linkId      String
+  link        TrackedLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  isQr        Boolean     @default(false)
+  device      String
+  browser     String?
+  os          String?
+  referrer    String?
+  country     String?
+  city        String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  createdAt   DateTime    @default(now())
+
+  @@index([linkId, createdAt])
+  @@index([createdAt])
+}
+
+/// A browsing session reported by tracker.js (id is generated client-side).
+model Session {
+  id          String   @id
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  visitorId   String
+  startedAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  landingPath String
+  referrer    String?
+  device      String
+  country     String?
+  city        String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmTerm     String?
+  utmContent  String?
+  pageviews   Int      @default(0)
+  /// 0-100
+  maxScroll   Int      @default(0)
+  converted   Boolean  @default(false)
+  events      Event[]
+
+  @@index([siteId, startedAt])
+  @@index([utmCampaign])
+  @@index([startedAt])
+}
+
+/// pageview | click | rage | move | scroll | conversion
+/// x / y are normalised 0-1 against document width / height.
+model Event {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type      String
+  path      String
+  x         Float?
+  y         Float?
+  vw        Int?
+  docH      Int?
+  /// cursor trail: [[x, y, msOffset], ...]
+  points    Json?
+  label     String?
+  device    String
+  createdAt DateTime @default(now())
+
+  @@index([siteId, path, type])
+  @@index([createdAt])
+}
