@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { SOURCE_BUCKETS, sourceBucket, type SourceBucket } from "./utm";
+import { demoCampaignPerformance, demoKpis, demoLinks, demoTrafficSeries, isDemoMode } from "./demo";
 
 export type RangeKey = "7d" | "30d" | "90d";
 export const RANGES: RangeKey[] = ["7d", "30d", "90d"];
@@ -46,6 +47,7 @@ async function periodStats(start: Date, end: Date): Promise<PeriodStats> {
 }
 
 export async function getKpis(days: number) {
+  if (isDemoMode()) return demoKpis(days);
   const now = new Date();
   const from = new Date(now.getTime() - days * DAY);
   const prevFrom = new Date(from.getTime() - days * DAY);
@@ -60,6 +62,7 @@ export async function getKpis(days: number) {
 export type TrafficPoint = { date: string } & Record<SourceBucket, number>;
 
 export async function getTrafficSeries(days: number): Promise<TrafficPoint[]> {
+  if (isDemoMode()) return demoTrafficSeries(days);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const from = new Date(today.getTime() - (days - 1) * DAY);
@@ -98,6 +101,7 @@ export interface CampaignRow {
 }
 
 export async function getCampaignPerformance(days: number, opts: { source?: string; medium?: string } = {}): Promise<CampaignRow[]> {
+  if (isDemoMode()) return demoCampaignPerformance(days, opts);
   const from = new Date(Date.now() - days * DAY);
   const sourceFilter = opts.source ? Prisma.sql`AND "utmSource" = ${opts.source}` : Prisma.empty;
   const mediumFilter = opts.medium ? Prisma.sql`AND "utmMedium" = ${opts.medium}` : Prisma.empty;
@@ -179,6 +183,7 @@ export interface LinkRow {
 }
 
 export async function getLinks(opts: { channel?: string; days?: number } = {}): Promise<LinkRow[]> {
+  if (isDemoMode()) return demoLinks(opts);
   const from = new Date(Date.now() - (opts.days ?? 30) * DAY);
   const links = await prisma.trackedLink.findMany({
     where: opts.channel ? { channel: opts.channel } : undefined,

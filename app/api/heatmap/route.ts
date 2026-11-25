@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import type { HeatmapData } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { DEMO_SITE_ID } from "@/lib/demo";
+import { DEMO_SITE_ID, demoHeatmapData, isDemoMode } from "@/lib/demo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +25,10 @@ export async function GET(req: NextRequest) {
   const parsed = querySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!parsed.success) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
   const { siteId, path, device, days } = parsed.data;
+
+  if (isDemoMode()) {
+    return NextResponse.json(demoHeatmapData(path, device), { headers: { "Cache-Control": "private, max-age=30" } });
+  }
 
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { domain: true } });
   if (!site) return NextResponse.json({ error: "Site not found" }, { status: 404 });

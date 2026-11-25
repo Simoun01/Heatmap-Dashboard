@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ActivityItem } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
+import { demoActivity, isDemoMode } from "@/lib/demo";
 import { sourceBucket } from "@/lib/utm";
 
 export const runtime = "nodejs";
@@ -8,6 +9,9 @@ export const dynamic = "force-dynamic";
 
 
 export async function GET() {
+  if (isDemoMode()) {
+    return NextResponse.json({ items: demoActivity() }, { headers: { "Cache-Control": "no-store" } });
+  }
   const [clicks, sessions] = await Promise.all([
     prisma.click.findMany({
       orderBy: { createdAt: "desc" },

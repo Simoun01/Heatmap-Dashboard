@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isDemoMode } from "@/lib/demo";
 import { appUrl, randomSlug } from "@/lib/utils";
 import { buildUtmUrl, normalizeUtm, normalizeUtmValue } from "@/lib/utm";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+
+const DEMO_ERROR = "Demo mode: set a DATABASE_URL in Vercel to save changes.";
 
 const httpUrl = z
   .string()
@@ -56,6 +59,7 @@ export interface CreatedLink {
 }
 
 export async function createTrackedLink(input: CreateLinkInput): Promise<Result<CreatedLink>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   const parsed = linkSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const v = parsed.data;
@@ -108,6 +112,7 @@ export async function createTrackedLink(input: CreateLinkInput): Promise<Result<
 }
 
 export async function updateQrColors(id: string, qrFg: string, qrBg: string): Promise<Result<null>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   const parsed = z.object({ id: z.string().min(1).max(64), qrFg: hex, qrBg: hex }).safeParse({ id, qrFg, qrBg });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   await prisma.trackedLink.update({ where: { id }, data: { qrFg, qrBg } });
@@ -116,6 +121,7 @@ export async function updateQrColors(id: string, qrFg: string, qrBg: string): Pr
 }
 
 export async function deleteTrackedLink(id: string): Promise<Result<null>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   if (!id || id.length > 64) return { ok: false, error: "Invalid link" };
   await prisma.trackedLink.delete({ where: { id } }).catch(() => null);
   revalidatePath("/links");
@@ -131,6 +137,7 @@ const campaignSchema = z.object({
 });
 
 export async function createCampaign(input: z.input<typeof campaignSchema>): Promise<Result<{ id: string; utmCampaign: string }>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   const parsed = campaignSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const v = parsed.data;
@@ -147,6 +154,7 @@ export async function createCampaign(input: z.input<typeof campaignSchema>): Pro
 }
 
 export async function setCampaignStatus(id: string, status: "active" | "paused" | "ended"): Promise<Result<null>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   if (!["active", "paused", "ended"].includes(status)) return { ok: false, error: "Invalid status" };
   await prisma.campaign.update({ where: { id }, data: { status } });
   revalidatePath("/campaigns");
@@ -160,6 +168,7 @@ const siteSchema = z.object({
 });
 
 export async function createSite(input: z.input<typeof siteSchema>): Promise<Result<{ id: string; domain: string }>> {
+  if (isDemoMode()) return { ok: false, error: DEMO_ERROR };
   const parsed = siteSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   let domain = parsed.data.domain.toLowerCase();
