@@ -359,7 +359,6 @@ export function HeatmapViewer({ sites }: { sites: HeatmapSite[] }) {
                   <iframe
                     title="Page preview"
                     src={data.pageUrl}
-                    sandbox={frameSandbox(data.pageUrl)}
                     referrerPolicy="no-referrer"
                     loading="lazy"
                     tabIndex={-1}
