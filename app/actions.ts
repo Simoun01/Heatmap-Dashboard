@@ -230,7 +230,7 @@ export async function deleteReport(id: string): Promise<Result<null>> {
 
 const recordSchema = z.object({
   title: z.string().trim().min(1, "Give the record a title").max(200),
-  type: z.enum(["campaign", "traffic", "link", "session", "general"]).default("general"),
+  type: z.enum(["campaign", "traffic", "link", "session", "analysis", "general"]).default("general"),
   data: z.record(z.unknown()),
   notes: z.string().trim().max(2000).optional(),
 });

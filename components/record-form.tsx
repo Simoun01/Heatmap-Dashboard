@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { saveRecord } from "@/app/actions";
 
-const TYPES = ["campaign", "traffic", "link", "session", "general"] as const;
+const TYPES = ["campaign", "traffic", "link", "session", "analysis", "general"] as const;
 
 export function RecordForm() {
   const router = useRouter();

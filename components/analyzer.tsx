@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { ExternalLink, Globe, Loader2, ScanSearch, Tag } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, ExternalLink, Globe, Loader2, ScanSearch, Tag } from "lucide-react";
 import type { ScrapedLink, ScrapeResult } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LinkBuilder } from "@/components/link-builder";
 import { SnippetBox } from "@/components/snippet-box";
-import { createSite } from "@/app/actions";
+import { createSite, saveRecord } from "@/app/actions";
 
 function LinkList({ links, empty }: { links: ScrapedLink[]; empty: string }) {
   if (!links.length) return <p className="py-4 text-sm text-muted-foreground">{empty}</p>;
@@ -43,6 +44,8 @@ export function Analyzer({ initialUrl }: { initialUrl: string }) {
   const [site, setSite] = useState<{ id: string; domain: string } | null>(null);
   const [siteError, setSiteError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [saving, startSave] = useTransition();
+  const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const scrape = useCallback(async (target: string) => {
     if (!target.trim()) return;
@@ -50,6 +53,7 @@ export function Analyzer({ initialUrl }: { initialUrl: string }) {
     setError(null);
     setData(null);
     setSite(null);
+    setSaveMsg(null);
     try {
       const res = await fetch("/api/scrape", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: target.trim() }) });
       const json = (await res.json()) as ScrapeResult | { error: string };
@@ -168,9 +172,53 @@ export function Analyzer({ initialUrl }: { initialUrl: string }) {
                   </div>
                 ))}
               </div>
-              <a href={data.finalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                Open page <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-              </a>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <a href={data.finalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                  Open page <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                </a>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={saving || saveMsg?.ok === true}
+                  onClick={() =>
+                    startSave(async () => {
+                      const r = await saveRecord({
+                        title: (data.title || host).slice(0, 200),
+                        type: "analysis",
+                        data: {
+                          "Scanned URL": url.trim(),
+                          "Final URL": data.finalUrl,
+                          "HTTP status": data.status,
+                          Title: data.title,
+                          Description: data.description || "None",
+                          Canonical: data.canonical ?? "Not set",
+                          "Existing UTMs": Object.entries(data.utm).map(([k, v]) => `${k}=${v}`).join(", ") || "None",
+                          "Internal links": data.stats.internal,
+                          "Outbound links": data.stats.outbound,
+                          "Tagged links": data.stats.withUtm,
+                          Words: data.stats.words,
+                          H1: data.headings.find((h) => h.level === 1)?.text ?? "None",
+                        },
+                      });
+                      setSaveMsg(r.ok ? { ok: true, text: "Saved to Records" } : { ok: false, text: r.error });
+                    })
+                  }
+                >
+                  {saving ? <Loader2 className="animate-spin" aria-hidden /> : <ClipboardList aria-hidden />}
+                  {saving ? "Saving…" : saveMsg?.ok ? "Saved" : "Save to Records"}
+                </Button>
+              </div>
+              {saveMsg && (
+                <p className={saveMsg.ok ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>
+                  {saveMsg.ok ? (
+                    <>
+                      Saved. <Link href="/records" className="font-medium text-primary hover:underline">View in Records</Link>
+                    </>
+                  ) : (
+                    saveMsg.text
+                  )}
+                </p>
+              )}
             </CardContent>
           </Card>
 

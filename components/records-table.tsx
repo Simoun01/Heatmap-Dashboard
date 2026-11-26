@@ -17,6 +17,11 @@ interface Row {
   createdAt: Date;
 }
 
+function esc(v: unknown): string {
+  const s = typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function PrintableRecord({ row }: { row: Row }) {
   return (
     <div className="space-y-4 p-8">
@@ -69,7 +74,7 @@ export function RecordsTable({ rows }: { rows: Row[] }) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>${row.title} - UTM Heatmap Record</title>
+        <title>${esc(row.title)} - UTM Heatmap Record</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 2rem; color: #1a1a1a; }
           h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
@@ -84,14 +89,14 @@ export function RecordsTable({ rows }: { rows: Row[] }) {
         </style>
       </head>
       <body>
-        <h1>${row.title}</h1>
-        <div class="meta">Type: ${row.type} · Created: ${row.createdAt.toLocaleDateString()} ${row.createdAt.toLocaleTimeString()}</div>
-        ${row.notes ? `<div class="notes">${row.notes}</div>` : ""}
+        <h1>${esc(row.title)}</h1>
+        <div class="meta">Type: ${esc(row.type)} · Created: ${row.createdAt.toLocaleDateString()} ${row.createdAt.toLocaleTimeString()}</div>
+        ${row.notes ? `<div class="notes">${esc(row.notes)}</div>` : ""}
         <table>
           <thead><tr><th>Field</th><th>Value</th></tr></thead>
           <tbody>
             ${Object.entries(row.data)
-              .map(([key, value]) => `<tr><td><strong>${key}</strong></td><td>${typeof value === "object" ? JSON.stringify(value) : String(value)}</td></tr>`)
+              .map(([key, value]) => `<tr><td><strong>${esc(key)}</strong></td><td>${esc(value)}</td></tr>`)
               .join("")}
           </tbody>
         </table>
