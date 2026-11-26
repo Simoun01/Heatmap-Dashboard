@@ -1,29 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-/**
- * Optional HTTP Basic auth for the dashboard.
- * Set DASHBOARD_PASSWORD (and optionally DASHBOARD_USER, default "admin") in Vercel to lock it down.
- * Public endpoints - short links, the tracker and its beacon endpoint, PWA files - are never gated.
- */
 export function middleware(req: NextRequest) {
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) return NextResponse.next();
+  const { pathname } = req.nextUrl;
 
-  const header = req.headers.get("authorization") ?? "";
-  if (header.startsWith("Basic ")) {
-    try {
-      const [user, pass] = atob(header.slice(6)).split(":");
-      if (user === (process.env.DASHBOARD_USER ?? "admin") && pass === password) return NextResponse.next();
-    } catch {
-      /* fall through to challenge */
-    }
+  // Public routes — never gated
+  if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/r/") ||
+    pathname.startsWith("/demo") ||
+    pathname.startsWith("/api/track") ||
+    pathname === "/tracker.js" ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js" ||
+    pathname.startsWith("/icons/") ||
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/_next/")
+  ) {
+    return NextResponse.next();
   }
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="UTM Heatmap Dashboard"' },
-  });
+
+  // Check for session cookie
+  const session = req.cookies.get("utm_session");
+  if (!session?.value) {
+    const loginUrl = new URL("/login", req.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!r/|demo|api/track|tracker\\.js|manifest\\.json|sw\\.js|icons/|favicon\\.ico|_next/static|_next/image).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico).*)"],
 };

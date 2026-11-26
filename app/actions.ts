@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +11,31 @@ import { buildUtmUrl, normalizeUtm, normalizeUtmValue } from "@/lib/utm";
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const DEMO_ERROR = "Demo mode: set your Supabase env vars to save changes.";
+
+// ── Authentication ──────────────────────────────────────────────────
+
+const AUTH_COOKIE = "utm_session";
+const VALID_USERNAME = process.env.DASHBOARD_USER ?? "admin";
+const VALID_PASSWORD = process.env.DASHBOARD_PASSWORD ?? "";
+
+export async function login(username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
+    return { ok: false, error: "Invalid username or password" };
+  }
+  const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
+  (await cookies()).set(AUTH_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return { ok: true };
+}
+
+export async function logout(): Promise<void> {
+  (await cookies()).delete(AUTH_COOKIE);
+}
 
 const httpUrl = z
   .string()
@@ -223,5 +249,37 @@ export async function deleteReport(id: string): Promise<Result<null>> {
   if (!id || id.length > 64) return { ok: false, error: "Invalid report" };
   await supabase.from("saved_reports").delete().eq("id", id);
   revalidatePath("/library");
+  return { ok: true, data: null };
+}
+
+// ── Records (printable analytics snapshots) ─────────────────────────
+
+const recordSchema = z.object({
+  title: z.string().trim().min(1, "Give the record a title").max(200),
+  type: z.enum(["campaign", "traffic", "link", "session", "general"]).default("general"),
+  data: z.record(z.unknown()),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export type SaveRecordInput = z.input<typeof recordSchema>;
+
+export async function saveRecord(input: SaveRecordInput): Promise<Result<{ id: string }>> {
+  const parsed = recordSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const v = parsed.data;
+  const { data, error } = await supabase
+    .from("records")
+    .insert({ title: v.title, type: v.type, data: v.data, notes: v.notes ?? null })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/records");
+  return { ok: true, data: { id: data.id } };
+}
+
+export async function deleteRecord(id: string): Promise<Result<null>> {
+  if (!id || id.length > 64) return { ok: false, error: "Invalid record" };
+  await supabase.from("records").delete().eq("id", id);
+  revalidatePath("/records");
   return { ok: true, data: null };
 }

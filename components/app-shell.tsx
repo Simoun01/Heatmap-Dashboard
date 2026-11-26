@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Flame, Globe, LayoutDashboard, Link2, MapPin, Megaphone, ScanSearch } from "lucide-react";
+import { Activity, ClipboardList, Flame, Globe, LayoutDashboard, Link2, LogOut, MapPin, Megaphone, ScanSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UrlBar } from "@/components/url-bar";
+import { logout } from "@/app/actions";
 
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -14,6 +15,7 @@ const NAV = [
   { href: "/campaigns", label: "Campaigns & Ads", icon: Megaphone },
   { href: "/links", label: "Short Links & QR", icon: Link2 },
   { href: "/sites", label: "Sites & Tracker", icon: Globe },
+  { href: "/records", label: "Records", icon: ClipboardList },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -45,7 +47,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <p className="p-5 text-xs text-muted-foreground">First-party, cookieless tracking.</p>
+        <div className="space-y-2 p-5">
+          <button
+            type="button"
+            onClick={async () => { await logout(); window.location.href = "/login"; }}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+            Logout
+          </button>
+          <p className="text-xs text-muted-foreground">First-party, cookieless tracking.</p>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

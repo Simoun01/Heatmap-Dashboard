@@ -121,6 +121,18 @@ CREATE TABLE IF NOT EXISTS saved_reports (
 CREATE INDEX IF NOT EXISTS saved_reports_category_idx ON saved_reports(category);
 CREATE INDEX IF NOT EXISTS saved_reports_created_at_idx ON saved_reports(created_at);
 
+-- Records (printable analytics snapshots)
+CREATE TABLE IF NOT EXISTS records (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    title       text NOT NULL,
+    type        text NOT NULL DEFAULT 'general',
+    data        jsonb NOT NULL DEFAULT '{}',
+    notes       text,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS records_type_idx ON records(type);
+CREATE INDEX IF NOT EXISTS records_created_at_idx ON records(created_at);
+
 -- Auto-update updated_at trigger for saved_reports
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -142,6 +154,7 @@ ALTER TABLE tracked_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clicks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_reports ENABLE ROW LEVEL SECURITY;
 
 -- Allow full access via service role (used server-side)
@@ -151,4 +164,5 @@ CREATE POLICY "Service role full access" ON tracked_links FOR ALL USING (true) W
 CREATE POLICY "Service role full access" ON clicks FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access" ON records FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON saved_reports FOR ALL USING (true) WITH CHECK (true);
