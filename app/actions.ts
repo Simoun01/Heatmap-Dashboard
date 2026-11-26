@@ -17,13 +17,19 @@ const DEMO_ERROR = "Demo mode: set your Supabase env vars to save changes.";
 const AUTH_COOKIE = "utm_session";
 
 export async function login(username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { data: user } = await supabase
+  if (isDemoMode()) {
+    return { ok: false, error: "Supabase is not configured: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy." };
+  }
+  const { data: user, error } = await supabase
     .from("users")
     .select("id, username")
-    .eq("username", username)
+    .eq("username", username.trim())
     .eq("password", password)
     .maybeSingle();
 
+  if (error) {
+    return { ok: false, error: `Database error: ${error.message}` };
+  }
   if (!user) {
     return { ok: false, error: "Invalid username or password" };
   }
