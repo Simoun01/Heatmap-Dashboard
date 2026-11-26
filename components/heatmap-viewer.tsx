@@ -26,6 +26,14 @@ const DEVICES: { id: Device; label: string; icon: typeof Monitor }[] = [
   { id: "all", label: "All", icon: Layers },
 ];
 
+// allow-scripts + allow-same-origin is only safe for other origins; on our own origin it would let the frame escape the sandbox.
+function frameSandbox(pageUrl: string): string {
+  try {
+    if (new URL(pageUrl).origin !== window.location.origin) return "allow-scripts allow-same-origin";
+  } catch {}
+  return "allow-scripts";
+}
+
 // Sequential warm ramp (yellow -> orange -> red); low density stays transparent.
 const RAMP: [number, number, number][] = [
   [255, 237, 160],
@@ -351,7 +359,8 @@ export function HeatmapViewer({ sites }: { sites: HeatmapSite[] }) {
                   <iframe
                     title="Page preview"
                     src={data.pageUrl}
-                    sandbox="allow-scripts"
+                    sandbox={frameSandbox(data.pageUrl)}
+                    referrerPolicy="no-referrer"
                     loading="lazy"
                     tabIndex={-1}
                     aria-hidden
