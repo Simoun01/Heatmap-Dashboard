@@ -121,6 +121,18 @@ CREATE TABLE IF NOT EXISTS saved_reports (
 CREATE INDEX IF NOT EXISTS saved_reports_category_idx ON saved_reports(category);
 CREATE INDEX IF NOT EXISTS saved_reports_created_at_idx ON saved_reports(created_at);
 
+-- Users (login credentials)
+CREATE TABLE IF NOT EXISTS users (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    username    text UNIQUE NOT NULL,
+    password    text NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Insert default user
+INSERT INTO users (username, password) VALUES ('PAX', 'Numbers2020')
+ON CONFLICT (username) DO NOTHING;
+
 -- Records (printable analytics snapshots)
 CREATE TABLE IF NOT EXISTS records (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -154,6 +166,7 @@ ALTER TABLE tracked_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clicks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_reports ENABLE ROW LEVEL SECURITY;
 
@@ -164,5 +177,6 @@ CREATE POLICY "Service role full access" ON tracked_links FOR ALL USING (true) W
 CREATE POLICY "Service role full access" ON clicks FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON records FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON saved_reports FOR ALL USING (true) WITH CHECK (true);

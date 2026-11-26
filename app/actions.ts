@@ -15,14 +15,19 @@ const DEMO_ERROR = "Demo mode: set your Supabase env vars to save changes.";
 // ── Authentication ──────────────────────────────────────────────────
 
 const AUTH_COOKIE = "utm_session";
-const VALID_USERNAME = process.env.DASHBOARD_USER ?? "admin";
-const VALID_PASSWORD = process.env.DASHBOARD_PASSWORD ?? "";
 
 export async function login(username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
+  const { data: user } = await supabase
+    .from("users")
+    .select("id, username")
+    .eq("username", username)
+    .eq("password", password)
+    .maybeSingle();
+
+  if (!user) {
     return { ok: false, error: "Invalid username or password" };
   }
-  const token = Buffer.from(`${username}:${Date.now()}`).toString("base64");
+  const token = Buffer.from(`${user.username}:${Date.now()}`).toString("base64");
   (await cookies()).set(AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
