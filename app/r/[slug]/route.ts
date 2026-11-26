@@ -1,6 +1,5 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { demoLinkBySlug, isDemoMode } from "@/lib/demo";
 import { geoFromHeaders, isBot, parseUserAgent } from "@/lib/device";
 
 export const runtime = "nodejs";
@@ -33,14 +32,6 @@ async function resolve(slug: string): Promise<CachedLink | null> {
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!/^[a-z0-9_-]{1,64}$/i.test(slug)) return NextResponse.redirect(new URL("/", req.url), 302);
-
-  if (isDemoMode()) {
-    const demo = demoLinkBySlug(slug);
-    if (!demo) return NextResponse.redirect(new URL(`/links?missing=${encodeURIComponent(slug)}`, req.url), 302);
-    const res = NextResponse.redirect(demo.dest, 302);
-    res.headers.set("Cache-Control", "no-store");
-    return res;
-  }
 
   const link = await resolve(slug);
   if (!link) return NextResponse.redirect(new URL(`/links?missing=${encodeURIComponent(slug)}`, req.url), 302);

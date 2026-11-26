@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { isDemoMode } from "@/lib/demo";
 import { geoFromHeaders, isBot } from "@/lib/device";
 import { normalizeUtmValue } from "@/lib/utm";
 
@@ -63,8 +62,6 @@ export function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   if (isBot(req.headers.get("user-agent") ?? "")) return empty(204);
-  // No database configured: accept the beacon but don't persist (demo mode).
-  if (isDemoMode()) return empty(204);
 
   // sendBeacon posts text/plain to avoid a CORS preflight; parse the JSON ourselves.
   const raw = await req.text();

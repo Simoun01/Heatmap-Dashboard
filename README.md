@@ -13,17 +13,6 @@ Next.js 15 (App Router) · TypeScript · Tailwind + shadcn/ui · Prisma + Postgr
 | Overview KPIs, 7/30/90d chart, live feed | `/` |
 | Demo landing page (tracker installed, used by seed data) | `/demo` |
 
-## Run locally
-
-```bash
-cp .env.example .env          # set DATABASE_URL to any Postgres
-npm install
-npx prisma db push            # create tables
-npx prisma db seed            # 90 days of sample data
-npm run dev                   # http://localhost:3000
-npm run build                 # production build: type-check + lint
-```
-
 ## Deploy to Vercel
 
 ```bash

@@ -10,7 +10,6 @@ import { LinkBuilder } from "@/components/link-builder";
 import { CampaignStatus } from "@/components/campaign-status";
 import { getCampaignPerformance, parseRange, rangeDays } from "@/lib/analytics";
 import { prisma } from "@/lib/prisma";
-import { demoCampaignRegistry, isDemoMode } from "@/lib/demo";
 
 export const metadata: Metadata = { title: "Campaigns, Emails & Ads" };
 export const dynamic = "force-dynamic";
@@ -20,7 +19,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   const days = rangeDays(range);
   const [all, campaigns] = await Promise.all([
     getCampaignPerformance(days),
-    isDemoMode() ? demoCampaignRegistry() : prisma.campaign.findMany({ orderBy: { createdAt: "desc" }, include: { _count: { select: { links: true } } } }),
+    prisma.campaign.findMany({ orderBy: { createdAt: "desc" }, include: { _count: { select: { links: true } } } }),
   ]);
 
   const ads = all.filter((r) => r.medium === "cpc" || r.medium === "paid_social" || r.medium === "display");

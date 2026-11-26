@@ -5,23 +5,17 @@ import { PageHeader } from "@/components/page-header";
 import { SiteForm } from "@/components/site-form";
 import { SnippetBox } from "@/components/snippet-box";
 import { prisma } from "@/lib/prisma";
-import { demoSites, isDemoMode } from "@/lib/demo";
 import { formatNumber, timeAgo } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Sites & Tracker" };
 export const dynamic = "force-dynamic";
 
 export default async function SitesPage() {
-  const demo = isDemoMode();
-  const sites = demo
-    ? demoSites()
-    : await prisma.site.findMany({
-        orderBy: { createdAt: "asc" },
-        include: { _count: { select: { sessions: true, events: true } } },
-      });
-  const lastSeen = demo
-    ? demoSites().map((s) => ({ siteId: s.id, _max: { lastSeenAt: s.lastSeenAt } }))
-    : await prisma.session.groupBy({ by: ["siteId"], _max: { lastSeenAt: true } });
+  const sites = await prisma.site.findMany({
+    orderBy: { createdAt: "asc" },
+    include: { _count: { select: { sessions: true, events: true } } },
+  });
+  const lastSeen = await prisma.session.groupBy({ by: ["siteId"], _max: { lastSeenAt: true } });
 
   return (
     <>

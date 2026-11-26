@@ -14,7 +14,8 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
       <CardContent className="space-y-3 p-6">
         <h1 className="text-lg font-semibold">This view couldn&apos;t load</h1>
         <p className="text-sm text-muted-foreground">
-          Something went wrong loading this page. If the problem persists, check your connection and try refreshing.
+          The dashboard couldn&apos;t reach its database. Check that <code>DATABASE_URL</code> is set, the schema is pushed (<code>npx prisma db push</code>) and
+          seed data is loaded (<code>npx prisma db seed</code>).
         </p>
         <Button onClick={reset}>Try again</Button>
       </CardContent>
