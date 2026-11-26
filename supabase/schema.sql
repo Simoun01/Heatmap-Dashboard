@@ -180,3 +180,11 @@ CREATE POLICY "Service role full access" ON events FOR ALL USING (true) WITH CHE
 CREATE POLICY "Service role full access" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON records FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service role full access" ON saved_reports FOR ALL USING (true) WITH CHECK (true);
+
+-- Grant the server-side key (service_role / sb_secret_) access to all tables
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
