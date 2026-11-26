@@ -4,18 +4,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/page-header";
 import { SiteForm } from "@/components/site-form";
 import { SnippetBox } from "@/components/snippet-box";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { formatNumber, timeAgo } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Sites & Tracker" };
 export const dynamic = "force-dynamic";
 
 export default async function SitesPage() {
-  const sites = await prisma.site.findMany({
-    orderBy: { createdAt: "asc" },
-    include: { _count: { select: { sessions: true, events: true } } },
-  });
-  const lastSeen = await prisma.session.groupBy({ by: ["siteId"], _max: { lastSeenAt: true } });
+  const { data: sites } = await supabase.from("sites").select("*").order("created_at", { ascending: true });
+
+  const siteIds = (sites ?? []).map((s) => s.id);
+  const [{ data: sessCounts }, { data: eventCounts }, { data: lastSeenRows }] = await Promise.all([
+    siteIds.length ? supabase.from("sessions").select("site_id").in("site_id", siteIds) : { data: [] },
+    siteIds.length ? supabase.from("events").select("site_id").in("site_id", siteIds) : { data: [] },
+    siteIds.length ? supabase.from("sessions").select("site_id, last_seen_at").in("site_id", siteIds).order("last_seen_at", { ascending: false }) : { data: [] },
+  ]);
+
+  const sessCountMap = new Map<string, number>();
+  for (const s of sessCounts ?? []) sessCountMap.set(s.site_id, (sessCountMap.get(s.site_id) ?? 0) + 1);
+  const eventCountMap = new Map<string, number>();
+  for (const e of eventCounts ?? []) eventCountMap.set(e.site_id, (eventCountMap.get(e.site_id) ?? 0) + 1);
+  const lastSeenMap = new Map<string, string>();
+  for (const r of lastSeenRows ?? []) {
+    if (!lastSeenMap.has(r.site_id)) lastSeenMap.set(r.site_id, r.last_seen_at);
+  }
 
   return (
     <>
@@ -30,16 +42,16 @@ export default async function SitesPage() {
       </Card>
 
       <div className="mt-6 grid gap-6">
-        {sites.length === 0 && <p className="text-sm text-muted-foreground">No sites yet.</p>}
-        {sites.map((s) => {
-          const seen = lastSeen.find((l) => l.siteId === s.id)?._max.lastSeenAt;
+        {(!sites || sites.length === 0) && <p className="text-sm text-muted-foreground">No sites yet.</p>}
+        {(sites ?? []).map((s) => {
+          const seen = lastSeenMap.get(s.id);
           return (
             <Card key={s.id}>
               <CardHeader className="flex-row flex-wrap items-start justify-between gap-2 space-y-0">
                 <div className="space-y-1.5">
                   <CardTitle>{s.name}</CardTitle>
                   <CardDescription>
-                    {s.domain} · {formatNumber(s._count.sessions)} sessions · {formatNumber(s._count.events)} events · {seen ? `last hit ${timeAgo(seen)}` : "no data yet"}
+                    {s.domain} · {formatNumber(sessCountMap.get(s.id) ?? 0)} sessions · {formatNumber(eventCountMap.get(s.id) ?? 0)} events · {seen ? `last hit ${timeAgo(new Date(seen))}` : "no data yet"}
                   </CardDescription>
                 </div>
                 <Link href="/heatmaps" className="text-sm font-medium text-primary hover:underline">

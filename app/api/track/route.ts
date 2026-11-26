@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { geoFromHeaders, isBot } from "@/lib/device";
 import { normalizeUtmValue } from "@/lib/utm";
 
@@ -48,10 +47,10 @@ const siteCache = new Map<string, { ok: boolean; exp: number }>();
 async function siteExists(id: string): Promise<boolean> {
   const hit = siteCache.get(id);
   if (hit && hit.exp > Date.now()) return hit.ok;
-  const site = await prisma.site.findUnique({ where: { id }, select: { id: true } });
+  const { data } = await supabase.from("sites").select("id").eq("id", id).maybeSingle();
   if (siteCache.size > 1000) siteCache.clear();
-  siteCache.set(id, { ok: !!site, exp: Date.now() + 300_000 });
-  return !!site;
+  siteCache.set(id, { ok: !!data, exp: Date.now() + 300_000 });
+  return !!data;
 }
 
 const empty = (status: number) => new NextResponse(null, { status, headers: CORS });
@@ -63,7 +62,6 @@ export function OPTIONS() {
 export async function POST(req: NextRequest) {
   if (isBot(req.headers.get("user-agent") ?? "")) return empty(204);
 
-  // sendBeacon posts text/plain to avoid a CORS preflight; parse the JSON ourselves.
   const raw = await req.text();
   if (raw.length > 256_000) return empty(413);
   let json: unknown;
@@ -82,63 +80,68 @@ export async function POST(req: NextRequest) {
   const pageviews = b.e.filter((e) => e.t === "pageview").length;
   const converted = b.e.some((e) => e.t === "conversion");
   const scroll = b.sc ?? 0;
-  // Governance: "Google" and "google " land in the same bucket as "google".
   const utm = (v?: string) => (v ? normalizeUtmValue(v) || null : null);
 
-  const createData: Prisma.SessionUncheckedCreateInput = {
-    id: b.sid,
-    siteId: b.s,
-    visitorId: b.v,
-    landingPath: b.p,
-    referrer: b.r || null,
-    device: b.d,
-    country: geo.country,
-    city: geo.city,
-    utmSource: utm(b.u?.source),
-    utmMedium: utm(b.u?.medium),
-    utmCampaign: utm(b.u?.campaign),
-    utmTerm: utm(b.u?.term),
-    utmContent: utm(b.u?.content),
-    pageviews,
-    maxScroll: scroll,
-    converted,
-  };
-  const updateData: Prisma.SessionUpdateInput = {
-    lastSeenAt: new Date(),
-    pageviews: { increment: pageviews },
-    ...(converted ? { converted: true } : {}),
-  };
-
   try {
-    const existing = await prisma.session.findUnique({ where: { id: b.sid }, select: { siteId: true } });
-    if (existing && existing.siteId !== b.s) return empty(409);
-    try {
-      await prisma.session.upsert({ where: { id: b.sid }, create: createData, update: updateData });
-    } catch (err) {
-      // Two beacons for a brand-new session can race; the loser just updates.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        await prisma.session.update({ where: { id: b.sid }, data: updateData });
-      } else throw err;
+    const { data: existing } = await supabase.from("sessions").select("site_id").eq("id", b.sid).maybeSingle();
+    if (existing && existing.site_id !== b.s) return empty(409);
+
+    if (existing) {
+      await supabase.from("sessions").update({
+        last_seen_at: new Date().toISOString(),
+        pageviews: existing ? (await supabase.from("sessions").select("pageviews").eq("id", b.sid).single()).data!.pageviews + pageviews : pageviews,
+        ...(converted ? { converted: true } : {}),
+      }).eq("id", b.sid);
+    } else {
+      const { error } = await supabase.from("sessions").insert({
+        id: b.sid,
+        site_id: b.s,
+        visitor_id: b.v,
+        landing_path: b.p,
+        referrer: b.r || null,
+        device: b.d,
+        country: geo.country,
+        city: geo.city,
+        utm_source: utm(b.u?.source),
+        utm_medium: utm(b.u?.medium),
+        utm_campaign: utm(b.u?.campaign),
+        utm_term: utm(b.u?.term),
+        utm_content: utm(b.u?.content),
+        pageviews,
+        max_scroll: scroll,
+        converted,
+      });
+      if (error && error.code === "23505") {
+        await supabase.from("sessions").update({
+          last_seen_at: new Date().toISOString(),
+          ...(converted ? { converted: true } : {}),
+        }).eq("id", b.sid);
+      } else if (error) throw error;
     }
+
     if (scroll > 0) {
-      await prisma.session.updateMany({ where: { id: b.sid, maxScroll: { lt: scroll } }, data: { maxScroll: scroll } });
+      const { data: cur } = await supabase.from("sessions").select("max_scroll").eq("id", b.sid).single();
+      if (cur && cur.max_scroll < scroll) {
+        await supabase.from("sessions").update({ max_scroll: scroll }).eq("id", b.sid);
+      }
     }
+
     if (b.e.length) {
-      await prisma.event.createMany({
-        data: b.e.map((e) => ({
-          sessionId: b.sid,
-          siteId: b.s,
+      await supabase.from("events").insert(
+        b.e.map((e) => ({
+          session_id: b.sid,
+          site_id: b.s,
           type: e.t,
           path: e.p,
           x: e.x ?? null,
           y: e.y ?? null,
           vw: e.vw ?? null,
-          docH: e.dh ?? null,
-          points: e.pts ? (e.pts as Prisma.InputJsonValue) : Prisma.JsonNull,
+          doc_h: e.dh ?? null,
+          points: e.pts ?? null,
           label: e.l ?? null,
           device: b.d,
-        })),
-      });
+        }))
+      );
     }
   } catch (err) {
     console.error("track failed", err instanceof Error ? err.message : "unknown");

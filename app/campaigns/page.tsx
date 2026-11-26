@@ -9,7 +9,7 @@ import { CampaignForm } from "@/components/campaign-form";
 import { LinkBuilder } from "@/components/link-builder";
 import { CampaignStatus } from "@/components/campaign-status";
 import { getCampaignPerformance, parseRange, rangeDays } from "@/lib/analytics";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export const metadata: Metadata = { title: "Campaigns, Emails & Ads" };
 export const dynamic = "force-dynamic";
@@ -17,10 +17,20 @@ export const dynamic = "force-dynamic";
 export default async function CampaignsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const range = parseRange((await searchParams).range);
   const days = rangeDays(range);
-  const [all, campaigns] = await Promise.all([
+
+  const [all, { data: campaignsRaw }] = await Promise.all([
     getCampaignPerformance(days),
-    prisma.campaign.findMany({ orderBy: { createdAt: "desc" }, include: { _count: { select: { links: true } } } }),
+    supabase.from("campaigns").select("*").order("created_at", { ascending: false }),
   ]);
+
+  const campaignIds = (campaignsRaw ?? []).map((c) => c.id);
+  const { data: linkCounts } = campaignIds.length
+    ? await supabase.from("tracked_links").select("campaign_id").in("campaign_id", campaignIds)
+    : { data: [] };
+  const linkCountMap = new Map<string, number>();
+  for (const l of linkCounts ?? []) linkCountMap.set(l.campaign_id, (linkCountMap.get(l.campaign_id) ?? 0) + 1);
+
+  const campaigns = (campaignsRaw ?? []).map((c) => ({ ...c, _count: { links: linkCountMap.get(c.id) ?? 0 } }));
 
   const ads = all.filter((r) => r.medium === "cpc" || r.medium === "paid_social" || r.medium === "display");
   const email = all.filter((r) => r.medium === "email");
@@ -91,7 +101,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                   <div className="min-w-0">
                     <p className="font-medium">{c.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">
-                      {c.utmSource} / {c.utmMedium} / {c.utmCampaign}
+                      {c.utm_source} / {c.utm_medium} / {c.utm_campaign}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

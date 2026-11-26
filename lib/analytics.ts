@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import { prisma } from "./prisma";
+import { supabase } from "./supabase";
 import { SOURCE_BUCKETS, sourceBucket, type SourceBucket } from "./utm";
 
 export type RangeKey = "7d" | "30d" | "90d";
@@ -26,22 +25,35 @@ export interface PeriodStats {
 }
 
 async function periodStats(start: Date, end: Date): Promise<PeriodStats> {
-  const range = { gte: start, lt: end };
-  const [clicks, qrScans, gbpSessions, sessions, converted, scroll] = await Promise.all([
-    prisma.click.count({ where: { createdAt: range } }),
-    prisma.click.count({ where: { createdAt: range, isQr: true } }),
-    prisma.session.count({ where: { startedAt: range, utmSource: "google", utmMedium: "organic_local" } }),
-    prisma.session.count({ where: { startedAt: range } }),
-    prisma.session.count({ where: { startedAt: range, converted: true } }),
-    prisma.session.aggregate({ where: { startedAt: range }, _avg: { maxScroll: true } }),
+  const s = start.toISOString();
+  const e = end.toISOString();
+
+  const [
+    { count: clicks },
+    { count: qrScans },
+    { count: gbpSessions },
+    { count: sessions },
+    { count: converted },
+    { data: scrollData },
+  ] = await Promise.all([
+    supabase.from("clicks").select("*", { count: "exact", head: true }).gte("created_at", s).lt("created_at", e),
+    supabase.from("clicks").select("*", { count: "exact", head: true }).gte("created_at", s).lt("created_at", e).eq("is_qr", true),
+    supabase.from("sessions").select("*", { count: "exact", head: true }).gte("started_at", s).lt("started_at", e).eq("utm_source", "google").eq("utm_medium", "organic_local"),
+    supabase.from("sessions").select("*", { count: "exact", head: true }).gte("started_at", s).lt("started_at", e),
+    supabase.from("sessions").select("*", { count: "exact", head: true }).gte("started_at", s).lt("started_at", e).eq("converted", true),
+    supabase.from("sessions").select("max_scroll").gte("started_at", s).lt("started_at", e),
   ]);
+
+  const totalScroll = (scrollData ?? []).reduce((sum, r) => sum + (r.max_scroll ?? 0), 0);
+  const sessCount = sessions ?? 0;
+
   return {
-    clicks,
-    qrScans,
-    gbpSessions,
-    sessions,
-    conversionRate: sessions ? converted / sessions : 0,
-    avgScroll: scroll._avg.maxScroll ?? 0,
+    clicks: clicks ?? 0,
+    qrScans: qrScans ?? 0,
+    gbpSessions: gbpSessions ?? 0,
+    sessions: sessCount,
+    conversionRate: sessCount ? (converted ?? 0) / sessCount : 0,
+    avgScroll: sessCount ? totalScroll / sessCount : 0,
   };
 }
 
@@ -49,12 +61,12 @@ export async function getKpis(days: number) {
   const now = new Date();
   const from = new Date(now.getTime() - days * DAY);
   const prevFrom = new Date(from.getTime() - days * DAY);
-  const [current, previous, activeCampaigns] = await Promise.all([
+  const [current, previous] = await Promise.all([
     periodStats(from, now),
     periodStats(prevFrom, from),
-    prisma.campaign.count({ where: { status: "active" } }),
   ]);
-  return { current, previous, activeCampaigns };
+  const { count: activeCampaigns } = await supabase.from("campaigns").select("*", { count: "exact", head: true }).eq("status", "active");
+  return { current, previous, activeCampaigns: activeCampaigns ?? 0 };
 }
 
 export type TrafficPoint = { date: string } & Record<SourceBucket, number>;
@@ -64,11 +76,10 @@ export async function getTrafficSeries(days: number): Promise<TrafficPoint[]> {
   today.setUTCHours(0, 0, 0, 0);
   const from = new Date(today.getTime() - (days - 1) * DAY);
 
-  const rows = await prisma.$queryRaw<{ day: Date; source: string | null; medium: string | null; n: number }[]>`
-    SELECT date_trunc('day', "startedAt") AS day, "utmSource" AS source, "utmMedium" AS medium, COUNT(*)::int AS n
-    FROM "Session"
-    WHERE "startedAt" >= ${from}
-    GROUP BY 1, 2, 3`;
+  const { data: rows } = await supabase
+    .from("sessions")
+    .select("started_at, utm_source, utm_medium")
+    .gte("started_at", from.toISOString());
 
   const byDay = new Map<string, TrafficPoint>();
   for (let i = 0; i < days; i++) {
@@ -77,10 +88,10 @@ export async function getTrafficSeries(days: number): Promise<TrafficPoint[]> {
     for (const b of SOURCE_BUCKETS) point[b] = 0;
     byDay.set(date, point);
   }
-  for (const r of rows) {
-    const key = new Date(r.day).toISOString().slice(0, 10);
+  for (const r of rows ?? []) {
+    const key = new Date(r.started_at).toISOString().slice(0, 10);
     const point = byDay.get(key);
-    if (point) point[sourceBucket(r.source, r.medium)] += Number(r.n);
+    if (point) point[sourceBucket(r.utm_source, r.utm_medium)] += 1;
   }
   return Array.from(byDay.values());
 }
@@ -98,68 +109,64 @@ export interface CampaignRow {
 }
 
 export async function getCampaignPerformance(days: number, opts: { source?: string; medium?: string } = {}): Promise<CampaignRow[]> {
-  const from = new Date(Date.now() - days * DAY);
-  const sourceFilter = opts.source ? Prisma.sql`AND "utmSource" = ${opts.source}` : Prisma.empty;
-  const mediumFilter = opts.medium ? Prisma.sql`AND "utmMedium" = ${opts.medium}` : Prisma.empty;
+  const from = new Date(Date.now() - days * DAY).toISOString();
 
-  const [rows, clicks] = await Promise.all([
-    prisma.$queryRaw<{ campaign: string; source: string; medium: string; sessions: number; visitors: number; bounces: number; conversions: number }[]>`
-      SELECT "utmCampaign" AS campaign,
-             COALESCE("utmSource", '') AS source,
-             COALESCE("utmMedium", '') AS medium,
-             COUNT(*)::int AS sessions,
-             COUNT(DISTINCT "visitorId")::int AS visitors,
-             SUM(CASE WHEN "pageviews" <= 1 AND NOT "converted" THEN 1 ELSE 0 END)::int AS bounces,
-             SUM(CASE WHEN "converted" THEN 1 ELSE 0 END)::int AS conversions
-      FROM "Session"
-      WHERE "startedAt" >= ${from} AND "utmCampaign" IS NOT NULL ${sourceFilter} ${mediumFilter}
-      GROUP BY 1, 2, 3
-      ORDER BY sessions DESC
-      LIMIT 200`,
-    prisma.click.groupBy({
-      by: ["utmCampaign", "utmSource", "utmMedium"],
-      where: {
-        createdAt: { gte: from },
-        utmCampaign: { not: null },
-        ...(opts.source ? { utmSource: opts.source } : {}),
-        ...(opts.medium ? { utmMedium: opts.medium } : {}),
-      },
-      _count: { _all: true },
-    }),
-  ]);
+  let sessQuery = supabase
+    .from("sessions")
+    .select("utm_campaign, utm_source, utm_medium, visitor_id, pageviews, converted")
+    .gte("started_at", from)
+    .not("utm_campaign", "is", null);
+  if (opts.source) sessQuery = sessQuery.eq("utm_source", opts.source);
+  if (opts.medium) sessQuery = sessQuery.eq("utm_medium", opts.medium);
+  const { data: sessRows } = await sessQuery;
+
+  let clickQuery = supabase
+    .from("clicks")
+    .select("utm_campaign, utm_source, utm_medium")
+    .gte("created_at", from)
+    .not("utm_campaign", "is", null);
+  if (opts.source) clickQuery = clickQuery.eq("utm_source", opts.source);
+  if (opts.medium) clickQuery = clickQuery.eq("utm_medium", opts.medium);
+  const { data: clickRows } = await clickQuery;
 
   const out = new Map<string, CampaignRow>();
-  for (const r of rows) {
-    const sessions = Number(r.sessions);
-    out.set(`${r.campaign}|${r.source}|${r.medium}`, {
-      campaign: r.campaign,
-      source: r.source,
-      medium: r.medium,
-      sessions,
-      visitors: Number(r.visitors),
-      bounceRate: sessions ? Number(r.bounces) / sessions : 0,
-      conversions: Number(r.conversions),
-      conversionRate: sessions ? Number(r.conversions) / sessions : 0,
-      clicks: 0,
-    });
+
+  for (const r of sessRows ?? []) {
+    const key = `${r.utm_campaign}|${r.utm_source ?? ""}|${r.utm_medium ?? ""}`;
+    let row = out.get(key);
+    if (!row) {
+      row = { campaign: r.utm_campaign, source: r.utm_source ?? "", medium: r.utm_medium ?? "", sessions: 0, visitors: 0, bounceRate: 0, conversions: 0, conversionRate: 0, clicks: 0 };
+      out.set(key, row);
+    }
+    row.sessions++;
+    if (r.converted) row.conversions++;
+    if (r.pageviews <= 1 && !r.converted) row.bounceRate++;
   }
-  for (const c of clicks) {
-    const key = `${c.utmCampaign}|${c.utmSource ?? ""}|${c.utmMedium ?? ""}`;
-    const row = out.get(key);
-    if (row) row.clicks = c._count._all;
-    else
-      out.set(key, {
-        campaign: c.utmCampaign ?? "",
-        source: c.utmSource ?? "",
-        medium: c.utmMedium ?? "",
-        sessions: 0,
-        visitors: 0,
-        bounceRate: 0,
-        conversions: 0,
-        conversionRate: 0,
-        clicks: c._count._all,
-      });
+
+  const visitorSets = new Map<string, Set<string>>();
+  for (const r of sessRows ?? []) {
+    const key = `${r.utm_campaign}|${r.utm_source ?? ""}|${r.utm_medium ?? ""}`;
+    if (!visitorSets.has(key)) visitorSets.set(key, new Set());
+    visitorSets.get(key)!.add(r.visitor_id);
   }
+
+  for (const [key, row] of out) {
+    row.visitors = visitorSets.get(key)?.size ?? 0;
+    row.bounceRate = row.sessions ? row.bounceRate / row.sessions : 0;
+    row.conversionRate = row.sessions ? row.conversions / row.sessions : 0;
+  }
+
+  for (const c of clickRows ?? []) {
+    const key = `${c.utm_campaign}|${c.utm_source ?? ""}|${c.utm_medium ?? ""}`;
+    let row = out.get(key);
+    if (row) {
+      row.clicks++;
+    } else {
+      row = { campaign: c.utm_campaign ?? "", source: c.utm_source ?? "", medium: c.utm_medium ?? "", sessions: 0, visitors: 0, bounceRate: 0, conversions: 0, conversionRate: 0, clicks: 1 };
+      out.set(key, row);
+    }
+  }
+
   return Array.from(out.values()).sort((a, b) => b.sessions + b.clicks - (a.sessions + a.clicks));
 }
 
@@ -179,22 +186,44 @@ export interface LinkRow {
 }
 
 export async function getLinks(opts: { channel?: string; days?: number } = {}): Promise<LinkRow[]> {
-  const from = new Date(Date.now() - (opts.days ?? 30) * DAY);
-  const links = await prisma.trackedLink.findMany({
-    where: opts.channel ? { channel: opts.channel } : undefined,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-    select: { id: true, slug: true, title: true, destinationUrl: true, channel: true, placement: true, utmCampaign: true, qrFg: true, qrBg: true, createdAt: true },
-  });
-  if (links.length === 0) return [];
-  const counts = await prisma.click.groupBy({
-    by: ["linkId", "isQr"],
-    where: { linkId: { in: links.map((l) => l.id) }, createdAt: { gte: from } },
-    _count: { _all: true },
-  });
+  const from = new Date(Date.now() - (opts.days ?? 30) * DAY).toISOString();
+
+  let query = supabase
+    .from("tracked_links")
+    .select("id, slug, title, destination_url, channel, placement, utm_campaign, qr_fg, qr_bg, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (opts.channel) query = query.eq("channel", opts.channel);
+  const { data: links } = await query;
+  if (!links?.length) return [];
+
+  const ids = links.map((l) => l.id);
+  const { data: clickData } = await supabase
+    .from("clicks")
+    .select("link_id, is_qr")
+    .in("link_id", ids)
+    .gte("created_at", from);
+
+  const countMap = new Map<string, { direct: number; qr: number }>();
+  for (const c of clickData ?? []) {
+    const entry = countMap.get(c.link_id) ?? { direct: 0, qr: 0 };
+    if (c.is_qr) entry.qr++;
+    else entry.direct++;
+    countMap.set(c.link_id, entry);
+  }
+
   return links.map((l) => ({
-    ...l,
-    directClicks: counts.find((c) => c.linkId === l.id && !c.isQr)?._count._all ?? 0,
-    qrScans: counts.find((c) => c.linkId === l.id && c.isQr)?._count._all ?? 0,
+    id: l.id,
+    slug: l.slug,
+    title: l.title,
+    destinationUrl: l.destination_url,
+    channel: l.channel,
+    placement: l.placement,
+    utmCampaign: l.utm_campaign,
+    qrFg: l.qr_fg,
+    qrBg: l.qr_bg,
+    createdAt: new Date(l.created_at),
+    directClicks: countMap.get(l.id)?.direct ?? 0,
+    qrScans: countMap.get(l.id)?.qr ?? 0,
   }));
 }

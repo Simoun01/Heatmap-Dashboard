@@ -2,5 +2,5 @@
 export const DEMO_SITE_ID = "demo-site";
 
 export function isDemoMode(): boolean {
-  return !process.env.DATABASE_URL;
+  return !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY;
 }

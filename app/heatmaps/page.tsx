@@ -1,20 +1,27 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/page-header";
 import { HeatmapViewer, type HeatmapSite } from "@/components/heatmap-viewer";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export const metadata: Metadata = { title: "Heatmaps" };
 export const dynamic = "force-dynamic";
 
 export default async function HeatmapsPage() {
-  const [sites, pages] = await Promise.all([
-    prisma.site.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, domain: true } }),
-    prisma.event.groupBy({ by: ["siteId", "path"], _count: { _all: true }, orderBy: { _count: { id: "desc" } }, take: 500 }),
-  ]);
+  const { data: sites } = await supabase.from("sites").select("id, name, domain").order("created_at", { ascending: true });
+  const { data: eventRows } = await supabase.from("events").select("site_id, path");
 
-  const data: HeatmapSite[] = sites.map((s) => ({
+  const pageCounts = new Map<string, Map<string, number>>();
+  for (const e of eventRows ?? []) {
+    if (!pageCounts.has(e.site_id)) pageCounts.set(e.site_id, new Map());
+    const paths = pageCounts.get(e.site_id)!;
+    paths.set(e.path, (paths.get(e.path) ?? 0) + 1);
+  }
+
+  const data: HeatmapSite[] = (sites ?? []).map((s) => ({
     ...s,
-    pages: pages.filter((p) => p.siteId === s.id).map((p) => ({ path: p.path, events: p._count._all })),
+    pages: Array.from(pageCounts.get(s.id)?.entries() ?? [])
+      .map(([path, events]) => ({ path, events }))
+      .sort((a, b) => b.events - a.events),
   }));
 
   return (
