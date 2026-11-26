@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, ClipboardList, Flame, Globe, LayoutDashboard, Link2, LogOut, MapPin, Megaphone, ScanSearch } from "lucide-react";
+import { Activity, ClipboardList, Flame, Globe, LayoutDashboard, Link2, MapPin, Megaphone, ScanSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UrlBar } from "@/components/url-bar";
-import { logout } from "@/app/actions";
 
 const NAV = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -47,15 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="space-y-2 p-5">
-          <button
-            type="button"
-            onClick={async () => { await logout(); window.location.href = "/login"; }}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <LogOut className="h-4 w-4" aria-hidden />
-            Logout
-          </button>
+        <div className="p-5">
           <p className="text-xs text-muted-foreground">First-party, cookieless tracking.</p>
         </div>
       </aside>

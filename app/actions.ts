@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
@@ -11,45 +10,6 @@ import { buildUtmUrl, normalizeUtm, normalizeUtmValue } from "@/lib/utm";
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const DEMO_ERROR = "Demo mode: set your Supabase env vars to save changes.";
-
-// ── Authentication ──────────────────────────────────────────────────
-
-const AUTH_COOKIE = "utm_session";
-
-export async function login(username: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (isDemoMode()) {
-    return { ok: false, error: "Supabase is not configured: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy." };
-  }
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("id, username")
-    .eq("username", username.trim())
-    .eq("password", password)
-    .maybeSingle();
-
-  if (error) {
-    return {
-      ok: false,
-      error: `Database error: ${error.message} ${error.details ?? ""} (URL used: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL)})`,
-    };
-  }
-  if (!user) {
-    return { ok: false, error: "Invalid username or password" };
-  }
-  const token = Buffer.from(`${user.username}:${Date.now()}`).toString("base64");
-  (await cookies()).set(AUTH_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-  return { ok: true };
-}
-
-export async function logout(): Promise<void> {
-  (await cookies()).delete(AUTH_COOKIE);
-}
 
 const httpUrl = z
   .string()
