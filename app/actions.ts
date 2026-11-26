@@ -162,6 +162,41 @@ export async function setCampaignStatus(id: string, status: "active" | "paused" 
   return { ok: true, data: null };
 }
 
+// ── Saved Reports (Library) — uses Supabase directly ────────────────
+
+import { supabase } from "@/lib/supabase";
+
+const savedReportSchema = z.object({
+  name: z.string().trim().min(1, "Give the report a name").max(200),
+  category: z.enum(["campaign", "traffic", "link", "heatmap", "custom"]).default("custom"),
+  query: z.string().trim().min(1, "SQL query is required").max(10000),
+  filters: z.record(z.unknown()).optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export type SaveReportInput = z.input<typeof savedReportSchema>;
+
+export async function saveReport(input: SaveReportInput): Promise<Result<{ id: string }>> {
+  const parsed = savedReportSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  const v = parsed.data;
+  const { data, error } = await supabase
+    .from("saved_reports")
+    .insert({ name: v.name, category: v.category, query: v.query, filters: v.filters ?? null, notes: v.notes ?? null })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/library");
+  return { ok: true, data: { id: data.id } };
+}
+
+export async function deleteReport(id: string): Promise<Result<null>> {
+  if (!id || id.length > 64) return { ok: false, error: "Invalid report" };
+  await supabase.from("saved_reports").delete().eq("id", id);
+  revalidatePath("/library");
+  return { ok: true, data: null };
+}
+
 const siteSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   domain: z.string().trim().min(3, "Domain is required").max(253),
