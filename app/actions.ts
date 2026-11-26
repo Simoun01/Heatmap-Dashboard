@@ -28,7 +28,10 @@ export async function login(username: string, password: string): Promise<{ ok: t
     .maybeSingle();
 
   if (error) {
-    return { ok: false, error: `Database error: ${error.message}` };
+    return {
+      ok: false,
+      error: `Database error: ${error.message} ${error.details ?? ""} (URL used: ${JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_URL)})`,
+    };
   }
   if (!user) {
     return { ok: false, error: "Invalid username or password" };
